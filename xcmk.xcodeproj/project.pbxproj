@@ -76,6 +76,7 @@
 				1CFDBC611BAD444D00D70202 /* Frameworks */,
 				1CFDBC621BAD444D00D70202 /* CopyFiles */,
 				1CAAB4711BAE59360001392A /* Resources */,
+				1CAAB4731BAE61740001392A /* ShellScript */,
 			);
 			buildRules = (
 			);
@@ -127,6 +128,22 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		1CAAB4731BAE61740001392A /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "rm -rf /usr/local/bin/xcmk\n\ncp ${BUILD_DIR}/${CONFIGURATION}${EFFECTIVE_PLATFORM_NAME}/xcmk /usr/local/bin";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		1CFDBC601BAD444D00D70202 /* Sources */ = {

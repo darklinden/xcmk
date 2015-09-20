@@ -42,7 +42,8 @@ int main(int argc, const char * argv[]) {
     @autoreleasepool {
         // insert code here...
         if (argc < 2) {
-            printf("");
+            printf("\nxcmk\n -prj project path\n -tag target regex\n -sig CodeSign name\n -prf Provision Profile path\n\n");
+            return ErrorExit;
         }
         
         NSFileManager* fmgr = [NSFileManager defaultManager];
