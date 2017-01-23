@@ -171,6 +171,82 @@ def __main__():
     
     print("get bundle id: [" + bundle_id + "]\n")
     
+    xcpaths = os.path.split(XCODE_PRJ_PATH)
+    if len(xcpaths) > 1:
+        tmp = xcpaths[0]
+        xcpaths = os.path.split(tmp)
+        if len(xcpaths) > 1:
+            prj_path = xcpaths[0]
+
+    build_path = os.path.join(prj_path, "build")
+    if os.path.isdir(build_path):
+        shutil.rmtree(build_path)
+    mkdir_p(build_path)
+
+    arc_path = os.path.join(build_path, "build.xcarchive")
+
+    print("reading schemes ... \n");
+    print (prj_path)
+    os.chdir(prj_path)
+    schemes = run_cmd(["/usr/bin/xcodebuild", "-list"]);
+    start = False
+    tmp_schemes_lines = schemes.split("\n")
+    schemes_lines = []
+    for l in tmp_schemes_lines:
+        l = l.strip()
+        if start and len(l) > 0:
+            schemes_lines.append(l)
+
+        if l == "Schemes:":
+            start = True
+
+    tmp = os.path.basename(XCODE_PRJ_PATH)
+    prj_name, ext = os.path.split(tmp)
+
+    filted_schemes = []
+    for l in schemes_lines:
+        if str(l).find(prj_name) != -1:
+            filted_schemes.append(l)
+
+    if len(filted_schemes) == 1:
+        SchemeName = filted_schemes[0]
+        print("select scheme: [" + SchemeName + "]")
+    elif len(filted_schemes) > 0:
+        cmds = ["q"]
+        idx = 0
+        while idx < len(filted_schemes):
+            cmds.append(str(idx))
+            l = filted_schemes[idx]
+            print(str(idx) + "\t[" + l + "]")
+            idx = idx + 1
+
+        cmd, success = read_cmd("input number to use scheme, \"q\" to exit: ", cmds)
+        if success:
+            if cmd.strip() == "q":
+                return 0
+            else:
+                SchemeName = filted_schemes[int(cmd)]
+                print("select scheme: [" + SchemeName + "]")
+    else:
+        cmds = ["q"]
+        idx = 0
+        while idx < len(schemes_lines):
+            cmds.append(str(idx))
+            l = schemes_lines[idx]
+            print(str(idx) + "\t[" + l + "]")
+            idx = idx + 1
+
+        cmd, success = read_cmd("input number to use scheme, \"q\" to exit: ", cmds)
+        if success:
+            if cmd.strip() == "q":
+                return 0
+            else:
+                SchemeName = schemes_lines[int(cmd)]
+                print("select scheme: [" + SchemeName + "]")
+
+    print("building archive ...")
+    
+    
     # profiles path
     home = os.path.expanduser("~")
     profiles_path = os.path.join(home, "Library/MobileDevice/Provisioning Profiles/")
@@ -218,9 +294,9 @@ def __main__():
         # print("get ProvisionedDevices: [" + ProvisionedDevices + "]")
         
         if len(ProvisionedDevices) != 0:
-            profile_mode = "appstore"
+            profile_mode = "contains devices"
         else:
-            profile_mode = "dev|adhoc"
+            profile_mode = "no device list"
         
         UUID = plist_obj["UUID"]
         # print("get UUID: [" + UUID + "]\n")
@@ -232,6 +308,8 @@ def __main__():
         # print("get Name: [" + Name + "]\n")
         
         ExpirationDate = plist_obj["ExpirationDate"]
+        
+        TeamIdentifier = plist_obj["TeamIdentifier"][0]
 
         obj = {}
         obj["path"] = fpath
@@ -239,6 +317,7 @@ def __main__():
         obj["mode"] = profile_mode
         obj["UUID"] = UUID
         obj["TeamName"] = TeamName
+        obj["TeamIdentifier"] = TeamIdentifier
         obj["ExpirationDate"] = ExpirationDate
 
         key = "[" + Name + "]-[" + TeamName + "]-[" + profile_mode + "]"
@@ -251,7 +330,7 @@ def __main__():
                 profile_list.append(obj)
         else:
             if obj["ExpirationDate"] > saved_obj["ExpirationDate"]:
-                print("remove " + saved_obj["path"])
+                # print("remove " + saved_obj["path"])
                 # os.remove(os.path.join(profiles_path, saved_obj["path"]))
 
                 if bundle_id == e_bundle_id:
@@ -275,10 +354,6 @@ def __main__():
                     profile_list = new_list
                     profile_list.append(obj)
 
-            else:
-                print("remove " + obj["path"])
-                # os.remove(os.path.join(profiles_path, obj["path"]))
-
     print("found profiles could sign this bundle id:")
 
     if len(profile_list_name_match) > 0:
@@ -293,6 +368,7 @@ def __main__():
             print(str(idx) + "\t[" + obj["Name"] \
             + "]\n\t[" + obj["mode"] \
             + "]\n\t[" + obj["TeamName"] \
+            + "]\n\t[" + obj["TeamIdentifier"] \
             + "]\n\t[" + obj["UUID"] \
             + "]\n\t[" + str(obj["ExpirationDate"]) \
             + "]\n\t[" + os.path.join(profiles_path, obj["UUID"] + ".mobileprovision]\n"))
@@ -304,9 +380,10 @@ def __main__():
                 return 0
             else:
                 obj = profile_list_name_match[int(cmd)]
-                regex_replace(XCODE_PRJ_PATH, "CODE_SIGN_IDENTITY[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;, ]*", "CODE_SIGN_IDENTITY = \"\";")
-                regex_replace(XCODE_PRJ_PATH, "\"CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\]\"[ ]*=[ ,\"]*[a-z,A-Z,0-9,\\-,_,;, ,\"]*", "\"CODE_SIGN_IDENTITY[sdk=iphoneos*]\" = \"\";")
-                regex_replace(XCODE_PRJ_PATH, "PROVISIONING_PROFILE[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;]*", "PROVISIONING_PROFILE = \"" + obj["UUID"] + "\";")
+                regex_replace(XCODE_PRJ_PATH, "\"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]\"[ ]*=.*\n", "CODE_SIGN_IDENTITY = \"\";\n")
+                regex_replace(XCODE_PRJ_PATH, "PROVISIONING_PROFILE[ ]+=.*\n", "PROVISIONING_PROFILE = " + obj["UUID"] + ";\n")
+                regex_replace(XCODE_PRJ_PATH, "CODE_SIGN_RESOURCE_RULES_PATH[ ]*=.*\n", "CODE_SIGN_RESOURCE_RULES_PATH = \"\";\n")
+
     else:
 
         profile_list = sorted(profile_list, key=lambda obj: obj["TeamName"])
@@ -319,6 +396,7 @@ def __main__():
             print(str(idx) + "\t[" + obj["Name"] \
             + "]\n\t[" + obj["mode"] \
             + "]\n\t[" + obj["TeamName"] \
+            + "]\n\t[" + obj["TeamIdentifier"] \
             + "]\n\t[" + obj["UUID"] \
             + "]\n\t[" + str(obj["ExpirationDate"]) \
             + "]\n\t[" + os.path.join(profiles_path, obj["UUID"] + ".mobileprovision]\n"))
@@ -330,83 +408,12 @@ def __main__():
                 return 0
             else:
                 obj = profile_list[int(cmd)]
-                regex_replace(XCODE_PRJ_PATH, "CODE_SIGN_IDENTITY[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;, ]*", "CODE_SIGN_IDENTITY = \"\";")
-                regex_replace(XCODE_PRJ_PATH, "\"CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\]\"[ ]*=[ ,\"]*[a-z,A-Z,0-9,\\-,_,;, ,\"]*", "\"CODE_SIGN_IDENTITY[sdk=iphoneos*]\" = \"\";")
-                regex_replace(XCODE_PRJ_PATH, "PROVISIONING_PROFILE[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;]*", "PROVISIONING_PROFILE = \"" + obj["UUID"] + "\";")
-
-    xcpaths = os.path.split(XCODE_PRJ_PATH)
-    if len(xcpaths) > 1:
-        tmp = xcpaths[0]
-        xcpaths = os.path.split(tmp)
-        if len(xcpaths) > 1:
-            prj_path = xcpaths[0]
-
-    build_path = os.path.join(prj_path, "build")
-    if os.path.isdir(build_path):
-        shutil.rmtree(build_path)
-    mkdir_p(build_path)
-
-    arc_path = os.path.join(build_path, "build.xcarchive")
-
-    print("reading schemes ... \n");
-    print (prj_path)
+                regex_replace(XCODE_PRJ_PATH, "\"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]\"[ ]*=.*\n", "CODE_SIGN_IDENTITY = \"\";\n")
+                regex_replace(XCODE_PRJ_PATH, "PROVISIONING_PROFILE[ ]*=.*\n", "PROVISIONING_PROFILE = " + obj["UUID"] + ";\n")
+                regex_replace(XCODE_PRJ_PATH, "CODE_SIGN_RESOURCE_RULES_PATH[ ]*=.*\n", "CODE_SIGN_RESOURCE_RULES_PATH = \"\";\n")
+    
     os.chdir(prj_path)
-    schemes = run_cmd(["/usr/bin/xcodebuild", "-list"]);
-    start = False
-    tmp_schemes_lines = schemes.split("\n")
-    schemes_lines = []
-    for l in tmp_schemes_lines:
-        l = l.strip()
-        if start and len(l) > 0:
-            schemes_lines.append(l)
-
-        if l == "Schemes:":
-            start = True
-
-    tmp = os.path.basename(XCODE_PRJ_PATH)
-    prj_name, ext = os.path.split(tmp)
-
-    filted_schemes = []
-    for l in schemes_lines:
-        if str(l).find(prj_name) != -1:
-            filted_schemes.append(l)
-
-    if len(filted_schemes) > 0:
-        cmds = ["q"]
-        idx = 0
-        while idx < len(filted_schemes):
-            cmds.append(str(idx))
-            l = filted_schemes[idx]
-            print(str(idx) + "\t[" + l + "]")
-            idx = idx + 1
-
-        cmd, success = read_cmd("input number to use scheme, \"q\" to exit: ", cmds)
-        if success:
-            if cmd.strip() == "q":
-                return 0
-            else:
-                SchemeName = filted_schemes[int(cmd)]
-                print("select scheme: [" + SchemeName + "]")
-    else:
-        cmds = ["q"]
-        idx = 0
-        while idx < len(schemes_lines):
-            cmds.append(str(idx))
-            l = schemes_lines[idx]
-            print(str(idx) + "\t[" + l + "]")
-            idx = idx + 1
-
-        cmd, success = read_cmd("input number to use scheme, \"q\" to exit: ", cmds)
-        if success:
-            if cmd.strip() == "q":
-                return 0
-            else:
-                SchemeName = schemes_lines[int(cmd)]
-                print("select scheme: [" + SchemeName + "]")
-
-    print("building archive ...")
-
-    os.chdir(prj_path)
+    
     build_result = run_cmd(["/usr/bin/xcodebuild", "-scheme", SchemeName, "clean", "archive", "-archivePath", arc_path])
 
     if "** ARCHIVE SUCCEEDED **" not in build_result:
@@ -414,10 +421,25 @@ def __main__():
         return 0
 
     print("build success, exporting ipa ... \n")
+    
+    # ipa_method = ["app-store", "ad-hoc", "package", "enterprise", "development", "developer-id"]
+    # cmds = ["q"]
+    # idx = 0
+    # while idx < len(ipa_method):
+    #     cmds.append(str(idx))
+    #     print(str(idx) + "\t[" + ipa_method[idx] + "]")
+    #     idx = idx + 1
+    # cmd, success = read_cmd("input number to select ipa method, \"q\" to exit: ", cmds)
+    # if success:
+    #     if cmd.strip() == "q":
+    #         return 0
+    #     else:
+    #         s_method = ipa_method[int(cmd)]
+    # ipa_plist_path = ipa_plist() 
 
     ipa_path = os.path.join(build_path, "build.ipa")
 
-    export_result = run_cmd(["/usr/bin/xcodebuild", "-exportArchive", "-exportFormat", "ipa", "-archivePath", arc_path, "-exportPath", ipa_path, "-exportProvisioningProfile", obj["Name"]])
+    export_result = run_cmd(["/usr/bin/xcodebuild", "-exportArchive", "-archivePath", arc_path, "-exportPath", ipa_path])
 
     if "** EXPORT SUCCEEDED **" not in export_result:
         print("export failed")
