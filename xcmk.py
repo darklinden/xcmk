@@ -146,8 +146,21 @@ def __main__():
         return
 
     param = ""
+    autoMode = False
+    args = []
+
     if len(sys.argv) > 1:
-        param = sys.argv[1]
+        idx = 1
+        while idx < len(sys.argv) - 1:
+            a = str(sys.argv[idx])
+            if (a.startswith('-')):
+                args.append(a)
+            idx += 1
+
+        param = sys.argv[len(sys.argv) - 1]
+
+    if ("-a" in args) or ("-A" in args):
+        autoMode = True
 
     if not str(param).startswith("/"):
         param = os.path.join(os.getcwd(), param)
@@ -158,191 +171,197 @@ def __main__():
     if os.path.isfile(param):
         XCODE_PRJ_PATH = param
     else:
-        print("using xcmk [xcode-project-path] to auto build ipa")
+        print("using xcmk [xcode-project-path] [-a: auto mode] to auto build ipa")
         return
 
-    # find bundle id
-    bundle_id = ""
-    results = regex_find(XCODE_PRJ_PATH, "PRODUCT_BUNDLE_IDENTIFIER ?= ?\"?.+\"?;")
-    if len(results) > 0:
-        tmp = results[0]
-        tmp = tmp[len("PRODUCT_BUNDLE_IDENTIFIER"):]
-        bundle_id = tmp.strip("=; \t\n\"")
-    
-    print("get bundle id: [" + bundle_id + "]\n")
-    
-    # profiles path
-    home = os.path.expanduser("~")
-    profiles_path = os.path.join(home, "Library/MobileDevice/Provisioning Profiles/")
+    regex_replace(XCODE_PRJ_PATH, "CODE_SIGN_RESOURCE_RULES_PATH[ ]*=.*\n", "CODE_SIGN_RESOURCE_RULES_PATH = \"\";\n")
 
-    file_duplicate_detector = {}
-    profile_list_name_match = []
-    profile_list = []
-    
-    dirs, files = dir_content(profiles_path)
-    for fpath in files:
-        if fpath.split(".")[-1].lower() != "mobileprovision":
-            continue
-        
-        path = os.path.join(profiles_path, fpath)
-        f = open(path, "r")
-        content = f.read()
-        f.close()
-        
-        # print("walking through: " + fpath)
-        start = content.find("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
-        end = content.find("</plist>")
-        
-        content = content[:(end + len("</plist>"))][start:]
+    if not autoMode:
+        # find bundle id
+        bundle_id = ""
+        results = regex_find(XCODE_PRJ_PATH, "PRODUCT_BUNDLE_IDENTIFIER ?= ?\"?.+\"?;")
+        if len(results) > 0:
+            tmp = results[0]
+            tmp = tmp[len("PRODUCT_BUNDLE_IDENTIFIER"):]
+            bundle_id = tmp.strip("=; \t\n\"")
 
-        plist_obj = plistlib.readPlistFromString(content)
+        print("get bundle id: [" + bundle_id + "]\n")
 
-        Entitlements = plist_obj["Entitlements"]
+        # profiles path
+        home = os.path.expanduser("~")
+        profiles_path = os.path.join(home, "Library/MobileDevice/Provisioning Profiles/")
 
-        app_id = Entitlements["application-identifier"]
-        team_id = Entitlements["com.apple.developer.team-identifier"]
+        file_duplicate_detector = {}
+        profile_list_name_match = []
+        profile_list = []
 
-        e_bundle_id = "-"
-        if app_id.startswith(team_id):
-            e_bundle_id = app_id[len(team_id):]
-            e_bundle_id = e_bundle_id.strip(".")
-            if e_bundle_id == "":
-                e_bundle_id = "*"
+        dirs, files = dir_content(profiles_path)
+        for fpath in files:
+            if fpath.split(".")[-1].lower() != "mobileprovision":
+                continue
 
-        if e_bundle_id != bundle_id and e_bundle_id != "*":
-            continue
-        
-        # print("found bundleid [" + bundle_id + "] in [" + fpath + "]\n")
-        
-        ProvisionedDevices = plist_obj.get("ProvisionedDevices", [])
-        # print("get ProvisionedDevices: [" + ProvisionedDevices + "]")
-        
-        if len(ProvisionedDevices) != 0:
-            profile_mode = "appstore"
-        else:
-            profile_mode = "dev|adhoc"
-        
-        UUID = plist_obj["UUID"]
-        # print("get UUID: [" + UUID + "]\n")
-        
-        TeamName = plist_obj["TeamName"]
-        # print("get TeamName: [" + TeamName + "]\n")
-        
-        Name = plist_obj["Name"]
-        # print("get Name: [" + Name + "]\n")
-        
-        ExpirationDate = plist_obj["ExpirationDate"]
+            path = os.path.join(profiles_path, fpath)
+            f = open(path, "r")
+            content = f.read()
+            f.close()
 
-        obj = {}
-        obj["path"] = fpath
-        obj["Name"] = Name
-        obj["mode"] = profile_mode
-        obj["UUID"] = UUID
-        obj["TeamName"] = TeamName
-        obj["ExpirationDate"] = ExpirationDate
+            # print("walking through: " + fpath)
+            start = content.find("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
+            end = content.find("</plist>")
 
-        key = "[" + Name + "]-[" + TeamName + "]-[" + profile_mode + "]"
-        saved_obj = file_duplicate_detector.get(key, {})
-        if saved_obj == {}:
-            file_duplicate_detector[key] = obj
-            if bundle_id == e_bundle_id:
-                profile_list_name_match.append(obj)
+            content = content[:(end + len("</plist>"))][start:]
+
+            plist_obj = plistlib.readPlistFromString(content)
+
+            Entitlements = plist_obj["Entitlements"]
+
+            app_id = Entitlements["application-identifier"]
+            team_id = Entitlements["com.apple.developer.team-identifier"]
+
+            e_bundle_id = "-"
+            if app_id.startswith(team_id):
+                e_bundle_id = app_id[len(team_id):]
+                e_bundle_id = e_bundle_id.strip(".")
+                if e_bundle_id == "":
+                    e_bundle_id = "*"
+
+            if e_bundle_id != bundle_id and e_bundle_id != "*":
+                continue
+
+            # print("found bundleid [" + bundle_id + "] in [" + fpath + "]\n")
+
+            ProvisionedDevices = plist_obj.get("ProvisionedDevices", [])
+            # print("get ProvisionedDevices: [" + ProvisionedDevices + "]")
+
+            if len(ProvisionedDevices) != 0:
+                profile_mode = "contains devices"
             else:
-                profile_list.append(obj)
-        else:
-            if obj["ExpirationDate"] > saved_obj["ExpirationDate"]:
-                print("remove " + saved_obj["path"])
-                # os.remove(os.path.join(profiles_path, saved_obj["path"]))
+                profile_mode = "no device list"
 
+            UUID = plist_obj["UUID"]
+            # print("get UUID: [" + UUID + "]\n")
+
+            TeamName = plist_obj["TeamName"]
+            # print("get TeamName: [" + TeamName + "]\n")
+
+            Name = plist_obj["Name"]
+            # print("get Name: [" + Name + "]\n")
+
+            ExpirationDate = plist_obj["ExpirationDate"]
+
+            TeamIdentifier = plist_obj["TeamIdentifier"][0]
+
+            obj = {}
+            obj["path"] = fpath
+            obj["Name"] = Name
+            obj["mode"] = profile_mode
+            obj["UUID"] = UUID
+            obj["TeamName"] = TeamName
+            obj["TeamIdentifier"] = TeamIdentifier
+            obj["ExpirationDate"] = ExpirationDate
+
+            key = "[" + Name + "]-[" + TeamName + "]-[" + profile_mode + "]"
+            saved_obj = file_duplicate_detector.get(key, {})
+            if saved_obj == {}:
+                file_duplicate_detector[key] = obj
                 if bundle_id == e_bundle_id:
-                    new_list = []
-                    for one_obj in profile_list_name_match:
-                        if one_obj["Name"] == obj["Name"] and one_obj["mode"] == obj["mode"] and one_obj["TeamName"] == obj["TeamName"]:
-                            continue
-                        else:
-                            new_list.append(one_obj)
-
-                    profile_list_name_match = new_list
                     profile_list_name_match.append(obj)
                 else:
-                    new_list = []
-                    for one_obj in profile_list:
-                        if one_obj["Name"] == obj["Name"] and one_obj["mode"] == obj["mode"] and one_obj["TeamName"] == obj["TeamName"]:
-                            continue
-                        else:
-                            new_list.append(one_obj)
-
-                    profile_list = new_list
                     profile_list.append(obj)
-
             else:
-                print("remove " + obj["path"])
-                # os.remove(os.path.join(profiles_path, obj["path"]))
+                if obj["ExpirationDate"] > saved_obj["ExpirationDate"]:
+                    # print("remove " + saved_obj["path"])
+                    # os.remove(os.path.join(profiles_path, saved_obj["path"]))
 
-    print("found profiles could sign this bundle id:")
+                    if bundle_id == e_bundle_id:
+                        new_list = []
+                        for one_obj in profile_list_name_match:
+                            if one_obj["Name"] == obj["Name"] and one_obj["mode"] == obj["mode"] and one_obj["TeamName"] == obj["TeamName"]:
+                                continue
+                            else:
+                                new_list.append(one_obj)
 
-    if len(profile_list_name_match) > 0:
+                        profile_list_name_match = new_list
+                        profile_list_name_match.append(obj)
+                    else:
+                        new_list = []
+                        for one_obj in profile_list:
+                            if one_obj["Name"] == obj["Name"] and one_obj["mode"] == obj["mode"] and one_obj["TeamName"] == obj["TeamName"]:
+                                continue
+                            else:
+                                new_list.append(one_obj)
 
-        profile_list_name_match = sorted(profile_list_name_match, key=lambda obj: obj["TeamName"])
+                        profile_list = new_list
+                        profile_list.append(obj)
 
-        cmds = ["q"]
-        idx = 0
-        while idx < len(profile_list_name_match):
-            cmds.append(str(idx))
-            cmds.append("s" + str(idx))
-            obj = profile_list_name_match[idx]
-            print(str(idx) + "\t[" + obj["Name"] \
-            + "]\n\t[" + obj["mode"] \
-            + "]\n\t[" + obj["TeamName"] \
-            + "]\n\t[" + obj["UUID"] \
-            + "]\n\t[" + str(obj["ExpirationDate"]) \
-            + "]\n\t[" + os.path.join(profiles_path, obj["UUID"] + ".mobileprovision]\n"))
-            idx = idx + 1
+        print("found profiles could sign this bundle id:")
 
-        cmd, success = read_cmd("input number to use profile, \"sx\" to use x whitout change, \"q\" to exit: ", cmds)
-        if success:
-            if cmd.strip() == "q":
-                return 0
-            else:
-                if cmd.startswith("s"):
-                    cmd = cmd[1:]
-                    obj = profile_list_name_match[int(cmd)]
+
+        if len(profile_list_name_match) > 0:
+
+            profile_list_name_match = sorted(profile_list_name_match, key=lambda obj: obj["TeamName"])
+
+            cmds = ["q"]
+            idx = 0
+            while idx < len(profile_list_name_match):
+                cmds.append(str(idx))
+                # cmds.append("s" + str(idx))
+                obj = profile_list_name_match[idx]
+                print(str(idx) + "\t[" + obj["Name"] \
+                + "]\n\t[" + obj["mode"] \
+                + "]\n\t[" + obj["TeamName"] \
+                + "]\n\t[" + obj["TeamIdentifier"] \
+                + "]\n\t[" + obj["UUID"] \
+                + "]\n\t[" + str(obj["ExpirationDate"]) \
+                + "]\n\t[" + os.path.join(profiles_path, obj["UUID"] + ".mobileprovision]\n"))
+                idx = idx + 1
+
+            cmd, success = read_cmd("input number to use profile, \"q\" to exit: ", cmds) # \"sx\" to use x whitout change,
+            if success:
+                if cmd.strip() == "q":
+                    return 0
                 else:
-                    obj = profile_list_name_match[int(cmd)]
-                    regex_replace(XCODE_PRJ_PATH, "CODE_SIGN_IDENTITY[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;, ]*", "CODE_SIGN_IDENTITY = \"\";")
-                    regex_replace(XCODE_PRJ_PATH, "\"CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\]\"[ ]*=[ ,\"]*[a-z,A-Z,0-9,\\-,_,;, ,\"]*", "\"CODE_SIGN_IDENTITY[sdk=iphoneos*]\" = \"\";")
-                    regex_replace(XCODE_PRJ_PATH, "PROVISIONING_PROFILE[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;]*", "PROVISIONING_PROFILE = \"" + obj["UUID"] + "\";")
-    else:
+                    if cmd.startswith("s"):
+                        cmd = cmd[1:]
+                        obj = profile_list_name_match[int(cmd)]
+                    else:
+                        obj = profile_list_name_match[int(cmd)]
+                        regex_replace(XCODE_PRJ_PATH, "CODE_SIGN_IDENTITY[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;, ]*", "CODE_SIGN_IDENTITY = \"\";")
+                        regex_replace(XCODE_PRJ_PATH, "\"CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\]\"[ ]*=[ ,\"]*[a-z,A-Z,0-9,\\-,_,;, ,\"]*", "\"CODE_SIGN_IDENTITY[sdk=iphoneos*]\" = \"\";")
+                        regex_replace(XCODE_PRJ_PATH, "PROVISIONING_PROFILE[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;]*", "PROVISIONING_PROFILE = \"" + obj["UUID"] + "\";")
 
-        profile_list = sorted(profile_list, key=lambda obj: obj["TeamName"])
+        else:
 
-        cmds = ["q"]
-        idx = 0
-        while idx < len(profile_list):
-            cmds.append(str(idx))
-            cmds.append("s" + str(idx))
-            obj = profile_list[idx]
-            print(str(idx) + "\t[" + obj["Name"] \
-            + "]\n\t[" + obj["mode"] \
-            + "]\n\t[" + obj["TeamName"] \
-            + "]\n\t[" + obj["UUID"] \
-            + "]\n\t[" + str(obj["ExpirationDate"]) \
-            + "]\n\t[" + os.path.join(profiles_path, obj["UUID"] + ".mobileprovision]\n"))
-            idx = idx + 1
+            profile_list = sorted(profile_list, key=lambda obj: obj["TeamName"])
 
-        cmd, success = read_cmd("input number to use profile, \"sx\" to use x whitout change, \"q\" to exit: ", cmds)
-        if success:
-            if cmd.strip() == "q":
-                return 0
-            else:
-                if cmd.startswith("s"):
-                    cmd = cmd[1:]
-                    obj = profile_list[int(cmd)]
+            cmds = ["q"]
+            idx = 0
+            while idx < len(profile_list):
+                cmds.append(str(idx))
+                # cmds.append("s" + str(idx))
+                obj = profile_list[idx]
+                print(str(idx) + "\t[" + obj["Name"] \
+                + "]\n\t[" + obj["mode"] \
+                + "]\n\t[" + obj["TeamName"] \
+                + "]\n\t[" + obj["TeamIdentifier"] \
+                + "]\n\t[" + obj["UUID"] \
+                + "]\n\t[" + str(obj["ExpirationDate"]) \
+                + "]\n\t[" + os.path.join(profiles_path, obj["UUID"] + ".mobileprovision]\n"))
+                idx = idx + 1
+
+            cmd, success = read_cmd("input number to use profile, \"q\" to exit: ", cmds) # \"sx\" to use x whitout change,
+            if success:
+                if cmd.strip() == "q":
+                    return 0
                 else:
-                    obj = profile_list[int(cmd)]
-                    regex_replace(XCODE_PRJ_PATH, "CODE_SIGN_IDENTITY[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;, ]*", "CODE_SIGN_IDENTITY = \"\";")
-                    regex_replace(XCODE_PRJ_PATH, "\"CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\]\"[ ]*=[ ,\"]*[a-z,A-Z,0-9,\\-,_,;, ,\"]*", "\"CODE_SIGN_IDENTITY[sdk=iphoneos*]\" = \"\";")
-                    regex_replace(XCODE_PRJ_PATH, "PROVISIONING_PROFILE[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;]*", "PROVISIONING_PROFILE = \"" + obj["UUID"] + "\";")
+                    if cmd.startswith("s"):
+                        cmd = cmd[1:]
+                        obj = profile_list[int(cmd)]
+                    else:
+                        obj = profile_list[int(cmd)]
+                        regex_replace(XCODE_PRJ_PATH, "CODE_SIGN_IDENTITY[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;, ]*", "CODE_SIGN_IDENTITY = \"\";")
+                        regex_replace(XCODE_PRJ_PATH, "\"CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\]\"[ ]*=[ ,\"]*[a-z,A-Z,0-9,\\-,_,;, ,\"]*", "\"CODE_SIGN_IDENTITY[sdk=iphoneos*]\" = \"\";")
+                        regex_replace(XCODE_PRJ_PATH, "PROVISIONING_PROFILE[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;]*", "PROVISIONING_PROFILE = \"" + obj["UUID"] + "\";")
 
     xcpaths = os.path.split(XCODE_PRJ_PATH)
     if len(xcpaths) > 1:
@@ -417,6 +436,7 @@ def __main__():
     print("building archive ...")
 
     os.chdir(prj_path)
+    
     build_result = run_cmd(["/usr/bin/xcodebuild", "-scheme", SchemeName, "clean", "archive", "-archivePath", arc_path])
 
     if "** ARCHIVE SUCCEEDED **" not in build_result:
@@ -424,10 +444,26 @@ def __main__():
         return 0
 
     print("build success, exporting ipa ... \n")
+    
+    # ipa_method = ["app-store", "ad-hoc", "package", "enterprise", "development", "developer-id"]
+    # cmds = ["q"]
+    # idx = 0
+    # while idx < len(ipa_method):
+    #     cmds.append(str(idx))
+    #     print(str(idx) + "\t[" + ipa_method[idx] + "]")
+    #     idx = idx + 1
+    # cmd, success = read_cmd("input number to select ipa method, \"q\" to exit: ", cmds)
+    # if success:
+    #     if cmd.strip() == "q":
+    #         return 0
+    #     else:
+    #         s_method = ipa_method[int(cmd)]
+    # ipa_plist_path = ipa_plist() 
 
     ipa_path = os.path.join(build_path, "build.ipa")
 
-    export_result = run_cmd(["/usr/bin/xcodebuild", "-exportArchive", "-exportFormat", "ipa", "-archivePath", arc_path, "-exportPath", ipa_path, "-exportProvisioningProfile", obj["Name"]])
+    # export_result = run_cmd(["/usr/bin/xcodebuild", "-exportArchive", "-exportFormat", "ipa", "-archivePath", arc_path, "-exportPath", ipa_path, "-exportProvisioningProfile", '"' + obj["Name"] + '"'])
+    export_result = run_cmd(["/usr/bin/xcodebuild", "-exportArchive", "-archivePath", arc_path, "-exportPath", ipa_path])
 
     if "** EXPORT SUCCEEDED **" not in export_result:
         print("export failed")
