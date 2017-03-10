@@ -163,11 +163,11 @@ def __main__():
 
     # find bundle id
     bundle_id = ""
-    results = regex_find(XCODE_PRJ_PATH, "PRODUCT_BUNDLE_IDENTIFIER[ ]+=[ ]+[a-z,A-Z,0-9,.,-,_,;]+")
+    results = regex_find(XCODE_PRJ_PATH, "PRODUCT_BUNDLE_IDENTIFIER ?= ?\"?.+\"?;")
     if len(results) > 0:
         tmp = results[0]
         tmp = tmp[len("PRODUCT_BUNDLE_IDENTIFIER"):]
-        bundle_id = tmp.strip("=; \t\n")
+        bundle_id = tmp.strip("=; \t\n\"")
     
     print("get bundle id: [" + bundle_id + "]\n")
     
@@ -289,6 +289,7 @@ def __main__():
         idx = 0
         while idx < len(profile_list_name_match):
             cmds.append(str(idx))
+            cmds.append("s" + str(idx))
             obj = profile_list_name_match[idx]
             print(str(idx) + "\t[" + obj["Name"] \
             + "]\n\t[" + obj["mode"] \
@@ -298,15 +299,19 @@ def __main__():
             + "]\n\t[" + os.path.join(profiles_path, obj["UUID"] + ".mobileprovision]\n"))
             idx = idx + 1
 
-        cmd, success = read_cmd("input number to use profile, \"q\" to exit: ", cmds)
+        cmd, success = read_cmd("input number to use profile, \"sx\" to use x whitout change, \"q\" to exit: ", cmds)
         if success:
             if cmd.strip() == "q":
                 return 0
             else:
-                obj = profile_list_name_match[int(cmd)]
-                regex_replace(XCODE_PRJ_PATH, "CODE_SIGN_IDENTITY[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;, ]*", "CODE_SIGN_IDENTITY = \"\";")
-                regex_replace(XCODE_PRJ_PATH, "\"CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\]\"[ ]*=[ ,\"]*[a-z,A-Z,0-9,\\-,_,;, ,\"]*", "\"CODE_SIGN_IDENTITY[sdk=iphoneos*]\" = \"\";")
-                regex_replace(XCODE_PRJ_PATH, "PROVISIONING_PROFILE[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;]*", "PROVISIONING_PROFILE = \"" + obj["UUID"] + "\";")
+                if cmd.startswith("s"):
+                    cmd = cmd[1:]
+                    obj = profile_list_name_match[int(cmd)]
+                else:
+                    obj = profile_list_name_match[int(cmd)]
+                    regex_replace(XCODE_PRJ_PATH, "CODE_SIGN_IDENTITY[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;, ]*", "CODE_SIGN_IDENTITY = \"\";")
+                    regex_replace(XCODE_PRJ_PATH, "\"CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\]\"[ ]*=[ ,\"]*[a-z,A-Z,0-9,\\-,_,;, ,\"]*", "\"CODE_SIGN_IDENTITY[sdk=iphoneos*]\" = \"\";")
+                    regex_replace(XCODE_PRJ_PATH, "PROVISIONING_PROFILE[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;]*", "PROVISIONING_PROFILE = \"" + obj["UUID"] + "\";")
     else:
 
         profile_list = sorted(profile_list, key=lambda obj: obj["TeamName"])
@@ -315,6 +320,7 @@ def __main__():
         idx = 0
         while idx < len(profile_list):
             cmds.append(str(idx))
+            cmds.append("s" + str(idx))
             obj = profile_list[idx]
             print(str(idx) + "\t[" + obj["Name"] \
             + "]\n\t[" + obj["mode"] \
@@ -324,15 +330,19 @@ def __main__():
             + "]\n\t[" + os.path.join(profiles_path, obj["UUID"] + ".mobileprovision]\n"))
             idx = idx + 1
 
-        cmd, success = read_cmd("input number to use profile, \"q\" to exit: ", cmds)
+        cmd, success = read_cmd("input number to use profile, \"sx\" to use x whitout change, \"q\" to exit: ", cmds)
         if success:
             if cmd.strip() == "q":
                 return 0
             else:
-                obj = profile_list[int(cmd)]
-                regex_replace(XCODE_PRJ_PATH, "CODE_SIGN_IDENTITY[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;, ]*", "CODE_SIGN_IDENTITY = \"\";")
-                regex_replace(XCODE_PRJ_PATH, "\"CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\]\"[ ]*=[ ,\"]*[a-z,A-Z,0-9,\\-,_,;, ,\"]*", "\"CODE_SIGN_IDENTITY[sdk=iphoneos*]\" = \"\";")
-                regex_replace(XCODE_PRJ_PATH, "PROVISIONING_PROFILE[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;]*", "PROVISIONING_PROFILE = \"" + obj["UUID"] + "\";")
+                if cmd.startswith("s"):
+                    cmd = cmd[1:]
+                    obj = profile_list[int(cmd)]
+                else:
+                    obj = profile_list[int(cmd)]
+                    regex_replace(XCODE_PRJ_PATH, "CODE_SIGN_IDENTITY[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;, ]*", "CODE_SIGN_IDENTITY = \"\";")
+                    regex_replace(XCODE_PRJ_PATH, "\"CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\]\"[ ]*=[ ,\"]*[a-z,A-Z,0-9,\\-,_,;, ,\"]*", "\"CODE_SIGN_IDENTITY[sdk=iphoneos*]\" = \"\";")
+                    regex_replace(XCODE_PRJ_PATH, "PROVISIONING_PROFILE[ ]+=[ ]+[\",a-z,A-Z,0-9,.,\\-,_,;]*", "PROVISIONING_PROFILE = \"" + obj["UUID"] + "\";")
 
     xcpaths = os.path.split(XCODE_PRJ_PATH)
     if len(xcpaths) > 1:
